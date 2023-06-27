@@ -1,0 +1,356 @@
+\documentclass{ol-softwaremanual}
+
+% Packages used in this example
+\usepackage{graphicx}  % for including images
+\usepackage{microtype} % for typographical enhancements
+\usepackage{minted}    % for code listings
+\usepackage{amsmath}   % for equations and mathematics
+\setminted{style=friendly,fontsize=\small}
+\renewcommand{\listoflistingscaption}{List of Code Listings}
+\usepackage{hyperref}  % for hyperlinks
+\usepackage[a4paper,top=4.2cm,bottom=4.2cm,left=3.5cm,right=3.5cm]{geometry} % for setting page size and margins
+\usepackage{listings}
+\usepackage{hyperref}
+
+
+% Custom macros used in this example document
+\newcommand{\doclink}[2]{\href{#1}{#2}\footnote{\url{#1}}}
+\newcommand{\cs}[1]{\texttt{\textbackslash #1}}
+
+
+
+% Frontmatter data; appears on title page
+\title{Tensorflow Lite C API Reference Guide}
+\version{2.14.0}
+
+\author{Andre L. Delai}
+
+\softwarelogo{\includegraphics[width=12cm]{TensorflowLiteLogo.png}}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\listoflistings
+\newpage
+
+\section{Introduction}
+
+The API leans towards simplicity and uniformity instead of convenience, as most usage will be by language-specific rappers. It provides largely the same set of functionality as that of the C++ TensorFlow Lite 'Interpreter` API, but is useful for shared libraries where having a stable ABI boundary is important.\\\\
+Conventions:
+ \begin{itemize}
+    \item  We use the prefix TfLite for everything in the API.
+    \item size\_t is used to represent byte sizes of objects that are materialized in the address space of the calling process.
+    \item int is used as an index into arrays. 
+\end{itemize}
+
+\begin{lstlisting}[language=C, caption=Usage, basicstyle=\ttfamily\small, frame = single, breaklines]
+
+// Create the model and interpreter options.
+TfLiteModel* model = TfLiteModelCreateFromFile("/path/to/model.tflite");
+TfLiteInterpreterOptions* options = TfLiteInterpreterOptionsCreate();
+TfLiteInterpreterOptionsSetNumThreads(options, 2);
+
+// Create the interpreter.
+TfLiteInterpreter* interpreter = TfLiteInterpreterCreate(model, options);
+
+// Allocate tensors and populate the input tensor data.
+TfLiteInterpreterAllocateTensors(interpreter);
+TfLiteTensor* input_tensor = 
+ TfLiteInterpreterGetInputTensor(interpreter, 0);
+TfLiteTensorCopyFromBuffer(input_tensor, input.data(), input.size() * sizeof(float));
+
+// Execute inference.
+TfLiteInterpreterInvoke(interpreter);
+
+// Extract the output tensor data.
+const TfLiteTensor* output_tensor =
+    TfLiteInterpreterGetOutputTensor(interpreter, 0);
+TfLiteTensorCopyToBuffer(output_tensor, output.data(), output.size() * sizeof(float));
+
+// Dispose of the model and interpreter objects.
+TfLiteInterpreterDelete(interpreter);
+TfLiteInterpreterOptionsDelete(options);
+TfLiteModelDelete(model);
+\end{lstlisting}
+ 
+\section{C API Reference Guide}
+
+\subsection{const char* TfLiteVersion(void)}
+Returns a pointer to a statically allocated string that is the version number of the (potentially dynamically loaded) TF Lite Runtime library.\\\\
+TensorFlow Lite uses semantic versioning, and the return value should be in semver 2 format <\url{http://semver.org}>, starting with MAJOR.MINOR.PATCH, e.g. "2.12.0" or "2.13.0-rc2".
+
+\subsection{int TfLiteSchemaVersion(void)}
+The supported TensorFlow Lite model file Schema version.\\\\
+Returns the (major) version number of the Schema used for model files supported by the (potentially dynamically loaded) TensorFlow Lite Runtime.
+Model files using schema versions different to this may not be supported by the current version of the TF Lite Runtime.
+
+\subsection{TfLiteModelCreate(const void* model\_data, size\_t model\_size)}
+
+Returns a model from the provided buffer, or null on failure.\\\\
+The caller retains ownership of the `model\_data' buffer and should ensure that the lifetime of the `model\_data' buffer must be at least as long as the lifetime of the TfLiteModel and of any `TfLiteInterpreter' objects created from that `TfLiteModel', and furthermore the contents of the `model\_data' buffer must not be modified during that time.
+
+\subsection{TfLiteModel* TfLiteModelCreateWithErrorReporter(
+    const void* model\_data, size\_t model\_size,
+    void (*reporter)(void* user\_data, const char* format, va\_list args),
+    void* user\_data)}
+
+Same as `TfLiteModelCreate' with customizble error reporter.
+
+\begin{itemize}
+    \item `reporter' takes the provided `user\_data' object, as well as a C-style format string and arg list (see also vprintf).
+    \item `user\_data' is optional. If non-null, it is owned by the client and must remain valid for the duration of the interpreter lifetime.
+\end{itemize}
+ 
+\subsection{TfLiteModel* TfLiteModelCreateFromFileWithErrorReporter(
+    const char* model\_path,
+    void (*reporter)(void* user\_data, const char* format, va\_list args),
+    void* user\_data);}
+
+ Same as `TfLiteModelCreateFromFile` with customizble error reporter.
+
+ \begin{itemize}
+     \item `reporter' takes the provided `user\_data' object, as well as a C-style format string and arg list (see also vprintf).
+     \item `user\_data' is optional. If non-null, it is owned by the client and must remain valid for the duration of the interpreter lifetime.
+ \end{itemize}
+
+\subsection{TfLiteModel* TfLiteModelCreateFromFile(const char* model\_path)}
+
+Returns a model from the provided file, or null on failure.\\\\
+The file's contents must not be modified during the lifetime of the
+`TfLiteModel' or of any `TfLiteInterpreter` objects created from that `TfLiteModel'.
+
+\subsection{void TfLiteModelDelete(TfLiteModel* model)}
+Destroys the model instance.
+
+\subsection{TfLiteInterpreterOptions* TfLiteInterpreterOptionsCreate()}
+Returns a new interpreter options instances.
+
+\subsection{TfLiteInterpreterOptions* TfLiteInterpreterOptionsCopy(
+    const TfLiteInterpreterOptions* from)}
+
+Creates and returns a shallow copy of an options object.
+
+The caller is responsible for calling `TfLiteInterpreterOptionsDelete' to
+deallocate the object pointed to by the returned pointer.
+
+\subsection{void TfLiteInterpreterOptionsDelete(TfLiteInterpreterOptions* options)}
+
+Destroys the interpreter options instance.
+
+\subsection{void TfLiteInterpreterOptionsSetNumThreads(TfLiteInterpreterOptions* options, int32\_t num\_threads)}
+
+Sets the number of CPU threads to use for the interpreter.
+
+\subsection{void TfLiteInterpreterOptionsAddDelegate(
+    TfLiteInterpreterOptions* options, TfLiteOpaqueDelegate* delegate)}
+
+
+Adds a delegate to be applied during `TfLiteInterpreter' creation.
+
+If delegate application fails, interpreter creation will also fail with an associated error logged.
+
+The caller retains ownership of the delegate and should ensure that it remains valid for the duration of any created interpreter's lifetime.
+
+If you are NOT using "TensorFlow Lite in Play Services", and NOT building with `TFLITE\_WITH\_STABLE\_ABI' or `TFLITE\_USE\_OPAQUE\_DELEGATE' macros enabled, it is possible to pass a `TfLiteDelegate*` rather than a `TfLiteOpaqueDelegate*` to this function, since in those cases, `TfLiteOpaqueDelegate` is just a typedef alias for `TfLiteDelegate`. This is for compatibility with existing source code and existing delegates.  For new delegates, it is recommended to use `TfLiteOpaqueDelegate` rather than `TfLiteDelegate`. (See `TfLiteOpaqueDelegate` in tensorflow/lite/core/c/c\_ap\_types.h.)
+
+\subsection{void TfLiteInterpreterOptionsSetErrorReporter(
+    TfLiteInterpreterOptions* options,
+    void (*reporter)(void* user\_data, const char* format, va\_list args),
+    void* user\_data)}
+
+Sets a custom error reporter for interpreter execution.
+
+\begin{itemize}
+    \item `reporter' takes the provided `user\_data` object, as well as a C-style format string and arg list (see also vprintf).
+    \item `user\_data is optional. If non-null, it is owned by the client and must remain valid for the duration of the interpreter lifetime.
+\end{itemize}
+
+\subsection{void TfLiteInterpreterOptionsAddRegistrationExternal(
+    TfLiteInterpreterOptions* options,
+    TfLiteRegistrationExternal* registration)}
+
+Adds an op registration to be applied during `TfLiteInterpreter` creation.
+
+ The `TfLiteRegistrationExternal' object is needed to implement custom op of TFLite Interpreter via C API. Calling this function ensures that any `TfLiteInterpreter' created with the specified `options` can execute models that use the custom operator specified in `registration'.
+ 
+ The caller retains ownership of the TfLiteRegistrationExternal object and should ensure that it remains valid for the duration of any created interpreter's lifetime.
+ 
+ This is an experimental API and subject to change.
+
+ Please refer \url{https://www.tensorflow.org/lite/guide/ops\_custom} for custom op support.
+
+\subsection{TfLiteStatus TfLiteInterpreterOptionsEnableCancellation(
+    TfLiteInterpreterOptions* options, bool enable)}
+
+Enables users to cancel in-flight invocations with `TfLiteInterpreterCancel'.
+
+By default it is disabled and calling to `TfLiteInterpreterCancel' will return kTfLiteError. See `TfLiteInterpreterCancel'.
+
+This is an experimental API and subject to change.
+
+\subsection{TfLiteInterpreter* TfLiteInterpreterCreate(
+    const TfLiteModel* model, const TfLiteInterpreterOptions* optional\_options)}
+
+Returns a new interpreter using the provided model and options, or null on failure.
+
+\begin{itemize}
+    \item `model' must be a valid model instance. The caller retains ownership of the object, and may destroy it (via TfLiteModelDelete) immediately after creating the interpreter.  However, if the TfLiteModel was allocated with TfLiteModelCreate, then the `model\_data' buffer that was passed to TfLiteModelCreate must outlive the lifetime of the TfLiteInterpreter object that this function returns, and must not be modified during that time; and if the TfLiteModel was allocated with TfLiteModelCreateFromFile, then the contents of the model file must not be modified during the lifetime of the TfLiteInterpreter object that this function returns.
+    
+    \item `optional\_options' may be null. The caller retains ownership of the object, and can safely destroy it (via TfLiteInterpreterOptionsDelete) immediately after creating the interpreter.
+\end{itemize}
+
+The client must explicitly allocate tensors before attempting to access input tensor data or invoke the interpreter.
+
+\subsection{void TfLiteInterpreterDelete(TfLiteInterpreter* interpreter)}
+
+Destroys the interpreter.
+
+\subsection{int32\_t TfLiteInterpreterGetInputTensorCount(const TfLiteInterpreter* interpreter)}
+
+eturns the number of input tensors associated with the model.
+
+\subsection{TfLiteTensor* TfLiteInterpreterGetInputTensor(
+    const TfLiteInterpreter* interpreter, int32\_t input\_index)}
+
+Returns the tensor associated with the input index.
+REQUIRES: 0 $<=$ input\_index $<$ fLiteInterpreterGetInputTensorCount(tensor)
+
+\subsection{TfLiteStatus TfLiteInterpreterResizeInputTensor(TfLiteInterpreter* interpreter, int32\_t input\_index, const int* input\_dims,
+    int32\_t input\_dims\_size)}
+
+Resizes the specified input tensor.
+
+After a resize, the client *must* explicitly allocate tensors before attempting to access the resized tensor data or invoke the interpreter.
+
+REQUIRES: 0 $<=$ input\_index $<$ TfLiteInterpreterGetInputTensorCount(tensor)
+
+This function makes a copy of the input dimensions, so the client can safely deallocate `input\_dims' immediately after this function returns.
+
+\subsection{TfLiteStatus TfLiteInterpreterAllocateTensors(  TfLiteInterpreter* interpreter)}
+
+Updates allocations for all tensors, resizing dependent tensors using the specified input tensor dimensionality.
+
+This is a relatively expensive operation, and need only be called after creating the graph and/or resizing any inputs.
+
+\subsection{TfLiteStatus TfLiteInterpreterInvoke(TfLiteInterpreter* interpreter)}
+
+Runs inference for the loaded graph.
+
+Before calling this function, the caller should first invoke TfLiteInterpreterAllocateTensors() and should also set the values for the input tensors.  After successfully calling this function, the values for the output tensors will be set.
+
+It is possible that the interpreter is not in a ready state to evaluate (e.g., if AllocateTensors() hasn't been called, or if a ResizeInputTensor() has been performed without a subsequent call to AllocateTensors()).
+
+If the (experimental!) delegate fallback option was enabled in the interpreter options, then the interpreter will automatically fall back to not using any delegates if execution with delegates fails. For details, see TfLiteInterpreterOptionsSetEnableDelegateFallback in c\_api\_experimental.h.
+
+Returns one of the following status codes:
+\begin{itemize}
+    \item kTfLiteOk: Success. Output is valid.
+    \item kTfLiteDelegateError: Execution with delegates failed, due to a problem with the delegate(s). If fallback was not enabled, output is invalid. If fallback was enabled, this return value indicates that fallback succeeded, the output is valid, and all delegates previously applied to the interpreter have been undone.
+    \item kTfLiteApplicationError: Same as for kTfLiteDelegateError, except that the problem was not with the delegate itself, but rather was due to an incompatibility between the delegate(s) and the interpreter or model.
+    \item kTfLiteError: Unexpected/runtime failure. Output is invalid.
+\end{itemize}
+
+\subsection{int32\_t TfLiteInterpreterGetOutputTensorCount(const TfLiteInterpreter* interpreter}
+
+Returns a pointer to an array of output tensor indices. The length of the array can be obtained via a call to `TfLiteInterpreterGetOutputTensorCount'.
+
+Typically the output tensors associated with an `interpreter' would be set during the initialization of the `interpreter', through a mechanism like the `InterpreterBuilder', and remain unchanged throughout the lifetime of the interpreter.  However, there are some circumstances in which the pointer may not remain valid throughout the lifetime of the interpreter, because calls to `SetOutputs' on the interpreter invalidate the returned pointer.
+
+The ownership of the array remains with the TFLite runtime.
+    
+\subsection{const TfLiteTensor* TfLiteInterpreterGetOutputTensor(const TfLiteInterpreter* interpreter, int32\_t output\_index)}
+
+Returns the tensor associated with the output index.
+REQUIRES: $0<=$ output\_index $<$ TfLiteInterpreterGetOutputTensorCount(tensor)
+
+The shape and underlying data buffer for output tensors may be not be available until after the output tensor has been both sized and allocated. 
+In general, best practice is to interact with the output tensor *after* calling TfLiteInterpreterInvoke().
+
+\subsection{TfLiteTensor* TfLiteInterpreterGetTensor(const TfLiteInterpreter* interpreter, int index)}
+
+Returns modifiable access to the tensor that corresponds to the specified `index` and is associated with the provided `interpreter'.
+
+This requires the `index' to be between 0 and N - 1, where N is the number of tensors in the model.
+
+Typically the tensors associated with the `interpreter' would be set during the `interpreter' initialization, through a mechanism like the `InterpreterBuilder', and remain unchanged throughout the lifetime of the interpreter.  However, there are some circumstances in which the pointer may  not remain valid throughout the lifetime of the interpreter, because calls  to `AddTensors' on the interpreter invalidate the returned pointer.
+
+Note the difference between this function and `TfLiteInterpreterGetInputTensor' (or `TfLiteInterpreterGetOutputTensor' for that matter): `TfLiteInterpreterGetTensor` takes an index into the array of all tensors associated with the `interpreter''s model, whereas `TfLiteInterpreterGetInputTensor' takes an index into the array of input tensors.
+
+The ownership of the tensor remains with the TFLite runtime, meaning the caller should not deallocate the pointer.
+
+TfLiteInterpreterGetTensor(const TfLiteInterpreter* interpreter,
+                                         int index);
+
+\subsection{TfLiteStatus TfLiteInterpreterCancel( const TfLiteInterpreter* interpreter)}
+
+Tries to cancel any in-flight invocation.
+
+This only cancels `TfLiteInterpreterInvoke' calls that happen before
+calling this and it does not cancel subsequent invocations.
+Calling this function will also cancel any in-flight invocations of
+SignatureRunners constructed from this interpreter.
+Non-blocking and thread safe.
+
+Returns kTfLiteError if cancellation is not enabled via
+`TfLiteInterpreterOptionsEnableCancellation'.
+
+warning: This is an experimental API and subject to change.
+
+\subsection{TfLiteType TfLiteTensorType(const TfLiteTensor* tensor)}
+
+TfLiteTensor wraps data associated with a graph tensor.
+
+Note that, while the TfLiteTensor struct is not currently opaque, and its fields can be accessed directly, these methods are still convenient for language bindings. In the future the tensor struct will likely be made opaque in the public API.
+
+Returns the type of a tensor element.
+
+\subsection{int32\_t TfLiteTensorNumDims(const TfLiteTensor* tensor)}
+
+Returns the number of dimensions that the tensor has.  Returns -1 in case the `opaque\_tensor' does not have its dimensions property set.
+
+\subsection{int32\_t TfLiteTensorDim(const TfLiteTensor* tensor, int32\_t dim\_index)}
+
+Returns the length of the tensor in the "dim\_index" dimension.
+REQUIRES: $0 <=$ dim\_index $<$ TFLiteTensorNumDims(tensor)
+
+\subsection{size\_t TfLiteTensorByteSize(const TfLiteTensor* tensor)}
+
+Returns the size of the underlying data in bytes.
+
+\subsection{void* TfLiteTensorData(const TfLiteTensor* tensor)}
+
+Returns a pointer to the underlying data buffer.
+The result may be null if tensors have not yet been allocated, e.g., if the Tensor has just been created or resized and `TfLiteAllocateTensors()' has yet to be called, or if the output tensor is dynamically sized and the interpreter hasn't been invoked.
+
+\subsection{const char* TfLiteTensorName(const TfLiteTensor* tensor)}
+
+Returns the (null-terminated) name of the tensor.
+
+\subsection{TfLiteQuantizationParams fLiteTensorQuantizationParams(const TfLiteTensor* tensor)}
+
+Returns the parameters for asymmetric quantization. The quantization parameters are only valid when the tensor type is `kTfLiteUInt8' and the `scale $!=$ 0'. Quantized values can be converted back to float using: 
+
+$real\_value = scale * (quantized\_value - zero\_point)$;
+
+\subsection{TfLiteStatus TfLiteTensorCopyFromBuffer(TfLiteTensor* tensor, const void* input\_data, size\_t input\_data\_size)}
+
+Copies from the provided input buffer into the tensor's buffer.
+
+REQUIRES: $input\_data\_size == TfLiteTensorByteSize(tensor)$
+
+\subsection{TfLiteStatus TfLiteTensorCopyToBuffer(const TfLiteTensor* output\_tensor, void* output\_data, size\_t output\_data\_size)}
+
+Copies to the provided output buffer from the tensor's buffer.
+
+REQUIRES: $output\_data\_size == TfLiteTensorByteSize(tensor)$
+
+\section{References}
+
+This document is a transcription of the commentaries in `c\_api.h' Tensorflow Lite header file.
+
+Tensorflow Lite is part of Tensorflow. The Tensorflow source code is available in: \url{https://github.com/tensorflow/tensorflow.git}\\\\
+
+This document was built using \LaTeX. Source code available in \url{https://github.com/andredelai/TFLiteCRefGuide.git}.
+
+\end{document}
